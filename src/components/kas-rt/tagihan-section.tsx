@@ -524,7 +524,81 @@ export function TagihanSection({ onRefresh }: { onRefresh?: () => void }) {
                     <span className="text-muted-foreground">Belum ada tagihan</span>
                   </div>
                 </div>
-                <div className="overflow-x-auto rounded-lg border scrollbar-thin">
+                {/* MOBILE: card per warga, 12 bulan grid 4x3 */}
+                <div className="md:hidden space-y-2">
+                  {matrixData.map((row) => {
+                    return (
+                      <div
+                        key={row.warga.id}
+                        className="rounded-xl border bg-card p-3 shadow-sm"
+                      >
+                        {/* Header: nama + total */}
+                        <div className="flex items-start justify-between gap-2 mb-3">
+                          <div className="min-w-0 flex-1">
+                            <div className="font-semibold text-sm truncate" title={row.warga.namaLengkap}>
+                              {row.warga.namaLengkap}
+                              {row.warga.kepalaKeluarga && (
+                                <Badge variant="secondary" className="ml-1 text-[9px] py-0 align-middle">KK</Badge>
+                              )}
+                            </div>
+                            <div className="text-[11px] text-muted-foreground truncate">
+                              {row.warga.noRumah ? `Rumah ${row.warga.noRumah}` : row.warga.nik}
+                            </div>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <div className="font-bold text-emerald-600 text-sm leading-none">{row.paid}/12</div>
+                            <div className="text-[10px] text-muted-foreground mt-0.5">{formatRupiah(row.totalLunas)}</div>
+                          </div>
+                        </div>
+                        {/* 12 bulan grid 4x3 (3 row x 4 col) */}
+                        <div className="grid grid-cols-4 gap-1.5">
+                          {row.months.map((mo) => {
+                            const t = mo.tagihan;
+                            const isCurrentMonth = new Date().getMonth() + 1 === mo.month && new Date().getFullYear() === year;
+                            const label = BULAN_LABEL[mo.month - 1];
+                            return (
+                              <button
+                                key={mo.month}
+                                onClick={() => t && setActionTarget({ tagihan: t, action: t.status === "lunas" ? "batal" : "bayar" })}
+                                disabled={!t}
+                                title={
+                                  t
+                                    ? `${row.warga.namaLengkap} - ${BULAN_NAMA[mo.month - 1]} ${year} - ${
+                                        t.status === "lunas" ? `Lunas (${formatRupiah(t.nominal)}). Klik untuk batalkan.` : `Belum bayar (${formatRupiah(t.nominal)}). Klik untuk lunasi.`
+                                      }`
+                                    : `${row.warga.namaLengkap} - ${BULAN_NAMA[mo.month - 1]} ${year} - Belum ada tagihan`
+                                }
+                                className={`flex flex-col items-center justify-center aspect-square rounded-lg transition-all text-[10px] font-medium ${
+                                  t
+                                    ? t.status === "lunas"
+                                      ? "bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white shadow-sm"
+                                      : isCurrentMonth
+                                      ? "bg-rose-100 dark:bg-rose-950 hover:bg-rose-200 dark:hover:bg-rose-900 text-rose-600 dark:text-rose-400 ring-1 ring-rose-300"
+                                      : "bg-rose-50 dark:bg-rose-950/50 hover:bg-rose-100 dark:hover:bg-rose-900 text-rose-500"
+                                    : "bg-muted/50 text-muted-foreground cursor-default"
+                                }`}
+                              >
+                                <span className="opacity-80">{label}</span>
+                                {t ? (
+                                  t.status === "lunas" ? (
+                                    <CheckCircle2 className="h-3.5 w-3.5 mt-0.5" />
+                                  ) : (
+                                    <XCircle className="h-3.5 w-3.5 mt-0.5" />
+                                  )
+                                ) : (
+                                  <span className="text-[10px] mt-0.5">—</span>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* DESKTOP: keep horizontal scroll table */}
+                <div className="hidden md:block overflow-x-auto rounded-lg border scrollbar-thin">
                   <table className="w-full text-sm border-collapse min-w-[760px]">
                     <thead>
                       <tr className="bg-muted/50">
@@ -609,7 +683,83 @@ export function TagihanSection({ onRefresh }: { onRefresh?: () => void }) {
                 Belum ada tagihan. Klik "Input Tagihan" atau "Generate Massal" untuk memulai.
               </div>
             ) : (
-              <div className="max-h-[55vh] overflow-y-auto rounded-md border scrollbar-thin">
+              <>
+              {/* MOBILE: card per tagihan */}
+              <div className="md:hidden space-y-2 max-h-[55vh] overflow-y-auto pr-1">
+                {list.map((t) => (
+                  <div key={t.id} className="rounded-xl border bg-card p-3 shadow-sm">
+                    {/* Header: warga + status */}
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="font-semibold text-sm truncate">{t.warga?.namaLengkap || "—"}</div>
+                        <div className="text-[10px] text-muted-foreground truncate">{t.warga?.nik}</div>
+                      </div>
+                      {t.status === "lunas" ? (
+                        <Badge className="bg-emerald-500 hover:bg-emerald-600 gap-1 shrink-0">
+                          <CheckCircle2 className="h-3 w-3" /> Lunas
+                        </Badge>
+                      ) : (
+                        <Badge variant="destructive" className="gap-1 shrink-0">
+                          <XCircle className="h-3 w-3" /> Belum
+                        </Badge>
+                      )}
+                    </div>
+
+                    {/* Body: jenis + periode */}
+                    <div className="flex items-center justify-between gap-2 mb-2 text-xs">
+                      <Badge variant="outline" className="text-[11px]">{t.jenisTagihan}</Badge>
+                      <span className="text-muted-foreground">{BULAN_NAMA[t.bulan - 1]} {t.tahun}</span>
+                    </div>
+
+                    {/* Nominal (large) */}
+                    <div className="text-lg font-bold mb-3">{formatRupiah(t.nominal)}</div>
+
+                    {/* Actions */}
+                    <div className="flex gap-1.5">
+                      {t.status === "belum_bayar" ? (
+                        <Button
+                          size="sm"
+                          onClick={() => setActionTarget({ tagihan: t, action: "bayar" })}
+                          className="flex-1 gap-1.5 bg-emerald-500 hover:bg-emerald-600 h-9"
+                        >
+                          <CheckCircle2 className="h-4 w-4" /> Lunaskan
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setActionTarget({ tagihan: t, action: "batal" })}
+                          className="flex-1 gap-1.5 text-amber-600 h-9"
+                        >
+                          <XCircle className="h-4 w-4" /> Batalkan
+                        </Button>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => openEdit(t)}
+                        disabled={t.status === "lunas"}
+                        className="h-9 px-3"
+                        title="Edit"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setDeleteId(t.id)}
+                        className="h-9 px-3 text-red-600 hover:text-red-700"
+                        title="Hapus"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* DESKTOP: keep table */}
+              <div className="hidden md:block max-h-[55vh] overflow-y-auto rounded-md border scrollbar-thin">
                 <Table>
                   <TableHeader className="sticky top-0 bg-background z-10">
                     <TableRow>
@@ -690,6 +840,7 @@ export function TagihanSection({ onRefresh }: { onRefresh?: () => void }) {
                   </TableBody>
                 </Table>
               </div>
+              </>
             )
           )}
 
