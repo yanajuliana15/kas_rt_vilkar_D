@@ -127,6 +127,7 @@ export function TagihanSection({ onRefresh }: { onRefresh?: () => void }) {
   const [addingJenis, setAddingJenis] = useState(false);
   const [deletingJenis, setDeletingJenis] = useState<string | null>(null);
   const [jenisToDelete, setJenisToDelete] = useState<string | null>(null);
+  const [jenisDialogOpen, setJenisDialogOpen] = useState(false);
 
   const fetchJenisList = useCallback(async () => {
     try {
@@ -517,6 +518,11 @@ export function TagihanSection({ onRefresh }: { onRefresh?: () => void }) {
               </CardDescription>
             </div>
             <div className="flex gap-2 flex-wrap">
+              <Button variant="outline" size="sm" onClick={() => setJenisDialogOpen(true)} className="gap-1.5">
+                <Tags className="h-4 w-4" />
+                <span className="hidden sm:inline">Kelola Jenis</span>
+                <span className="sm:hidden">Jenis</span>
+              </Button>
               <Button variant="outline" size="sm" onClick={() => setBulkOpen(true)} className="gap-1.5">
                 <Zap className="h-4 w-4" />
                 <span className="hidden sm:inline">Generate Massal</span>
@@ -991,24 +997,21 @@ export function TagihanSection({ onRefresh }: { onRefresh?: () => void }) {
         </CardContent>
       </Card>
 
-      {/* Kelola Jenis Tagihan Card */}
-      <Card className="card-lift shadow-md border-0">
-        <CardHeader className="pb-3">
-          <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <div className="rounded-lg bg-violet-50 dark:bg-violet-950 p-2">
-                  <Tags className="h-4 w-4 text-violet-600" />
-                </div>
-                Kelola Jenis Tagihan
-              </CardTitle>
-              <CardDescription className="text-sm mt-1">
-                Tambah jenis tagihan custom (mis: "Iuran Keagamaan", "Iuran Acara HUT RI", dll). Jenis yang sedang dipakai tagihan tidak bisa dihapus.
-              </CardDescription>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      {/* Dialog Kelola Jenis Tagihan */}
+      <Dialog open={jenisDialogOpen} onOpenChange={setJenisDialogOpen}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <div className="rounded-lg bg-violet-50 dark:bg-violet-950 p-2">
+                <Tags className="h-4 w-4 text-violet-600" />
+              </div>
+              Kelola Jenis Tagihan
+            </DialogTitle>
+            <DialogDescription>
+              Tambah jenis tagihan custom (mis: "Iuran Keagamaan", "Iuran Acara HUT RI"). Jenis yang sedang dipakai tagihan tidak bisa dihapus.
+            </DialogDescription>
+          </DialogHeader>
+
           {/* Form tambah */}
           <div className="flex gap-2">
             <Input
@@ -1019,11 +1022,12 @@ export function TagihanSection({ onRefresh }: { onRefresh?: () => void }) {
               className="flex-1 h-10"
               maxLength={50}
               disabled={addingJenis}
+              autoFocus
             />
             <Button
               onClick={handleAddJenis}
               disabled={addingJenis || !newJenis.trim()}
-              className="gap-1.5 shadow-md bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 h-10 px-4"
+              className="gap-1.5 shadow-md bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 h-10 px-4 shrink-0"
             >
               {addingJenis ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
               <span>Tambah</span>
@@ -1031,7 +1035,10 @@ export function TagihanSection({ onRefresh }: { onRefresh?: () => void }) {
           </div>
 
           {/* List of jenis */}
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
+          <div className="space-y-2">
+            <div className="text-xs font-medium text-muted-foreground">
+              {jenisList.length} jenis tagihan terdaftar
+            </div>
             {jenisList.map((j) => {
               const usedCount = list.filter((t) => t.jenisTagihan === j).length;
               return (
@@ -1077,8 +1084,8 @@ export function TagihanSection({ onRefresh }: { onRefresh?: () => void }) {
               Perubahan disimpan otomatis ke database dan langsung tersinkron ke dropdown di form Input Tagihan, Generate Massal, dan Filter. Jenis yang sudah dipakai tagihan tidak bisa dihapus — hapus/ubah tagihan terkait dulu.
             </div>
           </div>
-        </CardContent>
-      </Card>
+        </DialogContent>
+      </Dialog>
 
       {/* Konfirmasi Hapus Jenis */}
       <AlertDialog open={!!jenisToDelete} onOpenChange={(o) => !o && setJenisToDelete(null)}>
