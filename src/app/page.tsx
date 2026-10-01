@@ -418,6 +418,7 @@ export default function HomePage() {
         onToggleTheme={() => setTheme(theme === "dark" ? "light" : "dark")}
         installPrompt={installPrompt}
         onInstall={handleInstall}
+        isAdmin={isAdmin}
         isSuperadmin={isSuperadmin}
         onSeed={() => setSeedOpen(true)}
         onReset={() => setResetOpen(true)}

@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Sun, Moon, Sparkles, Database, Download, LogOut, LogIn } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -23,6 +24,7 @@ interface MoreSheetProps {
   installPrompt: unknown;
   onInstall: () => void;
   // Auth
+  isAdmin: boolean;
   isSuperadmin: boolean;
   onSeed: () => void;
   onReset: () => void;
@@ -44,13 +46,23 @@ export function MoreSheet({
   onToggleTheme,
   installPrompt,
   onInstall,
+  isAdmin,
   isSuperadmin,
   onSeed,
   onReset,
   onLogout,
 }: MoreSheetProps) {
-  // Sembunyikan tab yang sudah ada di bottom nav utama
-  const bottomNavTabs = ["dashboard", "struktur", "kas", "warga", "dokumentasi"];
+  // Tab yang tampil di BottomNav utama (slot 4 bisa Warga atau Dokumentasi,
+  // tergantung role). Tab yang SUDAH ada di bottom nav di-exclude dari sheet
+  // supaya tidak duplikat.
+  const bottomNavTabs = useMemo(() => {
+    const base = ["dashboard", "struktur", "kas"];
+    // Slot 4: warga kalau admin, dokumentasi kalau guest
+    if (isAdmin) base.push("warga");
+    else base.push("dokumentasi");
+    return base;
+  }, [isAdmin]);
+
   const extraTabs = navItems.filter((n) => !bottomNavTabs.includes(n.value));
 
   return (
