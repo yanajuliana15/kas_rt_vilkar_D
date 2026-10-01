@@ -1,8 +1,4 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+// Prisma schema untuk Aplikasi Laporan Kas RT
 
 generator client {
   provider = "prisma-client-js"
@@ -13,20 +9,153 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
+model Warga {
+  id           String         @id @default(cuid())
+  nik          String         @unique
+  namaLengkap  String
+  alias        String?
+  jenisKelamin String         // "L" | "P"
+  tempatLahir  String?
+  tanggalLahir String?
+  alamat       String
+  noRumah      String?
+  noHp         String?
+  email        String?
+  pekerjaan    String?
+  status       String         @default("aktif") // aktif | pindah | meninggal
+  kepalaKeluarga Boolean      @default(false)
+  keterangan   String?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  kasTransactions KasTransaction[]
+  berkas          Berkas[]
+  dokumentasi     Dokumentasi[]
+  tagihan         Tagihan[]
+  peminjaman      Peminjaman[]
+}
+
+model Tagihan {
+  id           String   @id @default(cuid())
+  wargaId      String
+  jenisTagihan String   // Iuran Bulanan, Iuran Keamanan, Iuran Kebersihan, Iuran Sampah, Lainnya
+  nominal      Float
+  bulan        Int      // 1-12
+  tahun        Int
+  status       String   @default("belum_bayar") // belum_bayar | lunas
+  keterangan   String?
+  kasTrxId     String?  // ID transaksi kas jika sudah dibayar
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  warga        Warga    @relation(fields: [wargaId], references: [id], onDelete: Cascade)
+}
+
+model Peminjaman {
+  id                String   @id @default(cuid())
+  wargaId           String
+  jumlah            Float    // jumlah pokok dipinjam
+  bunga             Float    @default(0) // bunga dalam nominal rupiah
+  tanggalPinjam     String   // ISO date
+  tanggalJatuhTempo String   // ISO date
+  totalBayar        Float    @default(0)
+  status            String   @default("aktif") // aktif | lunas | jatuh_tempo
+  keterangan        String?
+  kasTrxIdPencairan String?  // transaksi keluar saat pencairan
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  warga             Warga    @relation(fields: [wargaId], references: [id], onDelete: Cascade)
+  pembayaran        PembayaranPinjaman[]
+}
+
+model PembayaranPinjaman {
+  id           String   @id @default(cuid())
+  peminjamanId String
+  tanggal      String
+  jumlah       Float
+  keterangan   String?
+  kasTrxId     String?
+  createdAt    DateTime @default(now())
+
+  peminjaman   Peminjaman @relation(fields: [peminjamanId], references: [id], onDelete: Cascade)
+}
+
+model KasTransaction {
+  id          String   @id @default(cuid())
+  tanggal     String   // ISO date yyyy-mm-dd
+  jenis       String   // "masuk" | "keluar"
+  kategori    String   // iuran, sumbangan, belanja, operasional, dll
+  jumlah      Float
+  keterangan  String?
+  buktiUrl    String?
+  wargaId     String?  // relasi opsional ke warga (untuk iuran warga)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  warga       Warga?   @relation(fields: [wargaId], references: [id], onDelete: SetNull)
+}
+
+model Berkas {
+  id          String   @id @default(cuid())
+  wargaId     String
+  namaBerkas  String   // nama asli file
+  fileName    String   // nama file tersimpan di server
+  filePath    String   // path relatif untuk akses
+  fileType    String   // mime type
+  fileSize    Int      // dalam bytes
+  kategori    String   // KTP, KK, Akta, Sertifikat, Dokumen lain
+  keterangan  String?
+  uploadedAt  DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  warga       Warga    @relation(fields: [wargaId], references: [id], onDelete: Cascade)
+}
+
+model Dokumentasi {
+  id          String   @id @default(cuid())
+  wargaId     String
+  judul       String
+  tipe        String   // "planning" | "hasil"
+  tanggal     String   // ISO date
+  deskripsi   String
+  targetDate  String?  // untuk planning: target pencapaian
+  status      String   @default("berjalan") // berjalan | selesai | tertunda
+  progress    Int      @default(0) // 0-100
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  warga       Warga    @relation(fields: [wargaId], references: [id], onDelete: Cascade)
+}
+
+model Setting {
   id        String   @id @default(cuid())
-  email     String   @unique
-  name      String?
+  key       String   @unique
+  value     String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
-model Post {
+model Struktur {
+  id              String   @id @default(cuid())
+  jabatan         String   // Ketua, Wakil Ketua, Bendahara, Sekretaris, Sie Keamanan, Koordinator Gang, dll
+  nama            String   // nama orang (bisa link ke warga atau manual)
+  wargaId         String?  // opsional link ke Warga
+  noHp            String?
+  keterangan      String?
+  urutan          Int      @default(0) // urutan tampil (1=Ketua, 2=Wakil, dst)
+  koordinatorGang String?  // nama gang yg dikoodinasi (mis: "Gang A", "Gang B") - null jika bukan koordinator gang
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model AdminUser {
   id        String   @id @default(cuid())
-  title     String
-  content   String?
-  published Boolean  @default(false)
-  authorId  String
+  username  String   @unique
+  password  String   // hashed dengan scrypt
+  role      String   // "admin" | "superadmin"
+  nama      String
+  aktif     Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
