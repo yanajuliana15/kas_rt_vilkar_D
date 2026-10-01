@@ -17,6 +17,10 @@ import {
   HandCoins,
   Zap,
   Filter,
+  Tags,
+  Tag,
+  AlertCircle,
+  Loader2,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -100,7 +104,7 @@ export function TagihanSection({ onRefresh }: { onRefresh?: () => void }) {
 
   const [form, setForm] = useState({
     wargaId: "",
-    jenisTagihan: JENIS_TAGIHAN[0],
+    jenisTagihan: JENIS_TAGIHAN[0], // akan di-sync ke jenisList[0] saat openCreate
     nominal: "25000",
     bulan: String(new Date().getMonth() + 1),
     tahun: String(new Date().getFullYear()),
@@ -116,6 +120,117 @@ export function TagihanSection({ onRefresh }: { onRefresh?: () => void }) {
     status: "belum_bayar" as "belum_bayar" | "lunas",
     tanggalBayar: todayISO(),
   });
+
+  // === Dynamic Jenis Tagihan (stored in Setting table) ===
+  const [jenisList, setJenisList] = useState<string[]>(JENIS_TAGIHAN);
+  const [newJenis, setNewJenis] = useState("");
+  const [addingJenis, setAddingJenis] = useState(false);
+  const [deletingJenis, setDeletingJenis] = useState<string | null>(null);
+  const [jenisToDelete, setJenisToDelete] = useState<string | null>(null);
+
+  const fetchJenisList = useCallback(async () => {
+    try {
+      const res = await fetch("/api/setting?key=jenisTagihanList");
+      const json = await res.json();
+      const raw = json.data;
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setJenisList(parsed.filter((x) => typeof x === "string"));
+          }
+        } catch {
+          // fallback: keep default
+        }
+      }
+    } catch {
+      // silent fallback
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchJenisList();
+  }, [fetchJenisList]);
+
+  async function handleAddJenis() {
+    const trimmed = newJenis.trim();
+    if (!trimmed) {
+      toast({ title: "Validasi gagal", description: "Nama jenis tidak boleh kosong", variant: "destructive" });
+      return;
+    }
+    if (jenisList.some((j) => j.toLowerCase() === trimmed.toLowerCase())) {
+      toast({ title: "Sudah ada", description: `Jenis "${trimmed}" sudah ada di daftar`, variant: "destructive" });
+      return;
+    }
+    setAddingJenis(true);
+    try {
+      const newList = [...jenisList, trimmed];
+      const res = await authFetch("/api/setting", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: "jenisTagihanList", value: JSON.stringify(newList) }),
+      });
+      if (!res.ok) {
+        const j = await res.json();
+        throw new Error(j.error || "Gagal menyimpan");
+      }
+      setJenisList(newList);
+      setNewJenis("");
+      toast({ title: "Jenis ditambahkan", description: `"${trimmed}" berhasil ditambahkan` });
+    } catch (err) {
+      toast({
+        title: "Gagal menambahkan",
+        description: err instanceof Error ? err.message : "Terjadi kesalahan",
+        variant: "destructive",
+      });
+    } finally {
+      setAddingJenis(false);
+    }
+  }
+
+  async function handleDeleteJenis() {
+    if (!jenisToDelete) return;
+    const target = jenisToDelete;
+    // Cek apakah jenis sedang dipakai di tagihan mana pun
+    const usedCount = list.filter((t) => t.jenisTagihan === target).length;
+    if (usedCount > 0) {
+      toast({
+        title: "Tidak bisa hapus",
+        description: `Jenis "${target}" sedang dipakai oleh ${usedCount} tagihan. Hapus atau ubah tagihan tersebut dulu.`,
+        variant: "destructive",
+      });
+      setJenisToDelete(null);
+      return;
+    }
+    setDeletingJenis(target);
+    try {
+      const newList = jenisList.filter((j) => j !== target);
+      const res = await authFetch("/api/setting", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: "jenisTagihanList", value: JSON.stringify(newList) }),
+      });
+      if (!res.ok) {
+        const j = await res.json();
+        throw new Error(j.error || "Gagal menyimpan");
+      }
+      setJenisList(newList);
+      // Kalau jenis aktif di filter/form dihapus, reset
+      if (filterJenis === target) setFilterJenis("all");
+      if (form.jenisTagihan === target) setForm({ ...form, jenisTagihan: newList[0] || "" });
+      if (bulkForm.jenisTagihan === target) setBulkForm({ ...bulkForm, jenisTagihan: newList[0] || "" });
+      toast({ title: "Jenis dihapus", description: `"${target}" dihapus dari daftar` });
+      setJenisToDelete(null);
+    } catch (err) {
+      toast({
+        title: "Gagal menghapus",
+        description: err instanceof Error ? err.message : "Terjadi kesalahan",
+        variant: "destructive",
+      });
+    } finally {
+      setDeletingJenis(null);
+    }
+  }
 
   const { toast } = useToast();
 
@@ -149,7 +264,7 @@ export function TagihanSection({ onRefresh }: { onRefresh?: () => void }) {
   function openCreate() {
     setForm({
       wargaId: "",
-      jenisTagihan: JENIS_TAGIHAN[0],
+      jenisTagihan: jenisList[0] || JENIS_TAGIHAN[0],
       nominal: "25000",
       bulan: String(new Date().getMonth() + 1),
       tahun: String(year),
@@ -303,7 +418,7 @@ export function TagihanSection({ onRefresh }: { onRefresh?: () => void }) {
   }
 
   // Build matrix data: warga x bulan untuk jenis terpilih (matrix view)
-  const matrixJenis = filterJenis !== "all" ? filterJenis : JENIS_TAGIHAN[0];
+  const matrixJenis = filterJenis !== "all" ? filterJenis : (jenisList[0] || JENIS_TAGIHAN[0]);
   const matrixWarga = wargaList.filter((w) => w.status === "aktif");
   const matrixData = matrixWarga.map((w) => {
     const months: { month: number; tagihan?: Tagihan }[] = [];
@@ -433,7 +548,7 @@ export function TagihanSection({ onRefresh }: { onRefresh?: () => void }) {
                 <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Semua</SelectItem>
-                  {JENIS_TAGIHAN.map((j) => (
+                  {jenisList.map((j) => (
                     <SelectItem key={j} value={j}>{j}</SelectItem>
                   ))}
                 </SelectContent>
@@ -876,6 +991,118 @@ export function TagihanSection({ onRefresh }: { onRefresh?: () => void }) {
         </CardContent>
       </Card>
 
+      {/* Kelola Jenis Tagihan Card */}
+      <Card className="card-lift shadow-md border-0">
+        <CardHeader className="pb-3">
+          <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <div className="rounded-lg bg-violet-50 dark:bg-violet-950 p-2">
+                  <Tags className="h-4 w-4 text-violet-600" />
+                </div>
+                Kelola Jenis Tagihan
+              </CardTitle>
+              <CardDescription className="text-sm mt-1">
+                Tambah jenis tagihan custom (mis: "Iuran Keagamaan", "Iuran Acara HUT RI", dll). Jenis yang sedang dipakai tagihan tidak bisa dihapus.
+              </CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Form tambah */}
+          <div className="flex gap-2">
+            <Input
+              placeholder="Nama jenis tagihan baru..."
+              value={newJenis}
+              onChange={(e) => setNewJenis(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && !addingJenis && newJenis.trim()) handleAddJenis(); }}
+              className="flex-1 h-10"
+              maxLength={50}
+              disabled={addingJenis}
+            />
+            <Button
+              onClick={handleAddJenis}
+              disabled={addingJenis || !newJenis.trim()}
+              className="gap-1.5 shadow-md bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 h-10 px-4"
+            >
+              {addingJenis ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+              <span>Tambah</span>
+            </Button>
+          </div>
+
+          {/* List of jenis */}
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
+            {jenisList.map((j) => {
+              const usedCount = list.filter((t) => t.jenisTagihan === j).length;
+              return (
+                <div
+                  key={j}
+                  className="flex items-center justify-between gap-2 p-2.5 rounded-lg border bg-card hover:bg-muted/30 transition-colors"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="font-medium text-sm truncate flex items-center gap-1.5">
+                      <Tag className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                      <span className="truncate">{j}</span>
+                    </div>
+                    {usedCount > 0 && (
+                      <div className="text-[10px] text-muted-foreground mt-0.5">
+                        Dipakai {usedCount} tagihan
+                      </div>
+                    )}
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 shrink-0 text-muted-foreground hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950"
+                    onClick={() => setJenisToDelete(j)}
+                    disabled={deletingJenis === j}
+                    title={usedCount > 0 ? `Sedang dipakai ${usedCount} tagihan — tidak bisa hapus` : `Hapus "${j}"`}
+                    aria-label={`Hapus jenis ${j}`}
+                  >
+                    {deletingJenis === j ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Trash2 className="h-3.5 w-3.5" />
+                    )}
+                  </Button>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Info note */}
+          <div className="flex items-start gap-2 text-xs text-muted-foreground bg-muted/30 rounded-lg p-3">
+            <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+            <div>
+              Perubahan disimpan otomatis ke database dan langsung tersinkron ke dropdown di form Input Tagihan, Generate Massal, dan Filter. Jenis yang sudah dipakai tagihan tidak bisa dihapus — hapus/ubah tagihan terkait dulu.
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Konfirmasi Hapus Jenis */}
+      <AlertDialog open={!!jenisToDelete} onOpenChange={(o) => !o && setJenisToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Hapus Jenis Tagihan?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Yakin ingin menghapus jenis <strong className="text-foreground">&quot;{jenisToDelete}&quot;</strong>?
+              Tagihan yang sudah ada dengan jenis ini TIDAK akan terhapus — hanya pilihan di dropdown yang dihilangkan.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Batal</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteJenis}
+              disabled={!!deletingJenis}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {deletingJenis ? "Menghapus..." : "Ya, Hapus"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Input Dialog */}
       <Dialog open={inputOpen} onOpenChange={setInputOpen}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
@@ -907,7 +1134,7 @@ export function TagihanSection({ onRefresh }: { onRefresh?: () => void }) {
                 <Select value={form.jenisTagihan} onValueChange={(v) => setForm({ ...form, jenisTagihan: v })}>
                   <SelectTrigger id="jenisTagihan"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {JENIS_TAGIHAN.map((j) => (
+                    {jenisList.map((j) => (
                       <SelectItem key={j} value={j}>{j}</SelectItem>
                     ))}
                   </SelectContent>
@@ -982,7 +1209,7 @@ export function TagihanSection({ onRefresh }: { onRefresh?: () => void }) {
                 <Select value={bulkForm.jenisTagihan} onValueChange={(v) => setBulkForm({ ...bulkForm, jenisTagihan: v })}>
                   <SelectTrigger id="bulkJenis"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {JENIS_TAGIHAN.map((j) => (
+                    {jenisList.map((j) => (
                       <SelectItem key={j} value={j}>{j}</SelectItem>
                     ))}
                   </SelectContent>
