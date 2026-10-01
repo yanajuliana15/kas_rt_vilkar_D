@@ -213,47 +213,49 @@ export function AuthButton() {
           <span className="hidden sm:inline">Login</span>
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-sm">
+      <DialogContent className="max-w-sm sm:rounded-2xl p-5 sm:p-6">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Shield className="h-5 w-5 text-violet-600" /> Login Pengelola
+          <DialogTitle className="flex items-center gap-2 text-lg">
+            <div className="rounded-lg bg-violet-50 dark:bg-violet-950 p-1.5">
+              <Shield className="h-5 w-5 text-violet-600" />
+            </div>
+            Login Pengelola
           </DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="text-xs sm:text-sm">
             Masukkan username & password. Warga tanpa login hanya bisa melihat data terbatas.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleLogin} className="space-y-3" autoComplete="off">
-          <div className="space-y-2">
-            <Label htmlFor="username">Username *</Label>
+          <div className="space-y-1.5">
+            <Label htmlFor="username" className="text-sm font-medium">Username</Label>
             <div className="relative">
-              <UserCircle className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <UserCircle className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
               <Input
                 id="username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/\s/g, ""))}
                 required
-                className="pl-9"
-                placeholder="mis: admin, superadmin, bendahara01"
+                className="h-11 pl-10 text-base sm:text-sm"
                 autoCapitalize="none"
                 autoComplete="off"
                 autoCorrect="off"
                 spellCheck={false}
                 autoFocus
+                inputMode="email"
               />
             </div>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="password">Password *</Label>
+          <div className="space-y-1.5">
+            <Label htmlFor="password" className="text-sm font-medium">Password</Label>
             <div className="relative">
-              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
               <Input
                 id="password"
                 type={showPass ? "text" : "password"}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                className="pl-9 pr-9"
-                placeholder="••••••"
+                className="h-11 pl-10 pr-11 text-base sm:text-sm"
                 autoComplete="off"
                 autoCapitalize="off"
                 autoCorrect="off"
@@ -262,19 +264,21 @@ export function AuthButton() {
               <button
                 type="button"
                 onClick={() => setShowPass((s) => !s)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground"
+                className="absolute right-1 top-1/2 -translate-y-1/2 h-9 w-9 flex items-center justify-center rounded-md hover:bg-muted text-muted-foreground"
+                aria-label={showPass ? "Sembunyikan password" : "Tampilkan password"}
               >
                 {showPass ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
             </div>
           </div>
-          <div className="rounded-lg bg-amber-50 dark:bg-amber-950/40 p-2.5 text-xs text-amber-700 dark:text-amber-300">
-            <strong>🔒 Privasi:</strong> Masukkan username & password yang diberikan admin. Jangan bagikan kredensial ke orang lain.
+          <div className="flex items-start gap-2 rounded-lg bg-amber-50 dark:bg-amber-950/40 p-2.5 text-[11px] sm:text-xs text-amber-700 dark:text-amber-300">
+            <Lock className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+            <span>Masukkan kredensial dari admin. Jangan bagikan ke orang lain.</span>
           </div>
-          <DialogFooter className="flex flex-col gap-2">
-            <Button type="submit" disabled={loading} className="w-full gap-1.5">
-              <Shield className="h-4 w-4" />
-              {loading ? "Memproses..." : "Login"}
+          <DialogFooter className="flex flex-col gap-2 pt-2">
+            <Button type="submit" disabled={loading} className="w-full h-11 gap-2 text-base">
+              <LogIn className="h-4 w-4" />
+              {loading ? "Memproses..." : "Masuk"}
             </Button>
             <Button
               type="button"
@@ -282,9 +286,9 @@ export function AuthButton() {
               size="sm"
               onClick={handleReset}
               disabled={resetting}
-              className="text-xs text-muted-foreground hover:text-foreground gap-1"
+              className="h-9 text-xs text-muted-foreground hover:text-foreground gap-1.5"
             >
-              <KeyRound className="h-3 w-3" />
+              <KeyRound className="h-3.5 w-3.5" />
               {resetting ? "Merestart..." : "Lupa? Reset default users"}
             </Button>
           </DialogFooter>
