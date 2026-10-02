@@ -5,10 +5,9 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = "file:C:/Users/PTMI/Downloads/kas_rt_vilkar_D/db/custom.db"
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
 }
-
 model Warga {
   id           String         @id @default(cuid())
   nik          String         @unique
