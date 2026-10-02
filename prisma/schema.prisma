@@ -6,7 +6,7 @@ generator client {
 
 datasource db {
   provider = "sqlite"
-  url      = env("DATABASE_URL")
+  url      = "file:C:/Users/PTMI/Downloads/kas_rt_vilkar_D/db/custom.db"
 }
 
 model Warga {
