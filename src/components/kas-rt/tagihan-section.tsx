@@ -107,13 +107,15 @@ export function TagihanSection({ onRefresh }: { onRefresh?: () => void }) {
   const handleExportExcel = useCallback(async () => {
     try {
       setExporting(true);
-      const res = await fetch(`/api/kas/export-excel?from=${year}-01-01&to=${year}-12-31`);
+      const params = new URLSearchParams({ tahun: String(year) });
+      if (filterJenis && filterJenis !== "all") params.set("jenis", filterJenis);
+      const res = await fetch(`/api/tagihan/export-excel?${params.toString()}`);
       if (!res.ok) throw new Error("Gagal export. Coba lagi.");
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `laporan-kas-${new Date().toISOString().slice(0, 10)}.xlsx`;
+      a.download = `tagihan-warga-${year}.xlsx`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -123,7 +125,7 @@ export function TagihanSection({ onRefresh }: { onRefresh?: () => void }) {
     } finally {
       setExporting(false);
     }
-  }, [year]);
+  }, [year, filterJenis]);
 
   const [form, setForm] = useState({
     wargaId: "",
@@ -543,8 +545,8 @@ export function TagihanSection({ onRefresh }: { onRefresh?: () => void }) {
             <div className="flex gap-2 flex-wrap">
               <Button variant="outline" size="sm" onClick={handleExportExcel} disabled={exporting} className="gap-1.5">
                 {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
-                <span className="hidden sm:inline">Export Excel</span>
-                <span className="sm:hidden">Excel</span>
+                <span className="hidden sm:inline">Export Tagihan</span>
+                <span className="sm:hidden">Tagihan</span>
               </Button>
               <Button variant="outline" size="sm" onClick={() => setJenisDialogOpen(true)} className="gap-1.5">
                 <Tags className="h-4 w-4" />
