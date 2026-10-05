@@ -21,6 +21,7 @@ import {
   Tag,
   AlertCircle,
   Loader2,
+  FileSpreadsheet,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -104,7 +105,7 @@ export function TagihanSection({ onRefresh }: { onRefresh?: () => void }) {
 
   const [form, setForm] = useState({
     wargaId: "",
-    jenisTagihan: JENIS_TAGIHAN[0], // akan di-sync ke jenisList[0] saat openCreate
+    jenisTagihan: JENIS_TAGIHAN[0],
     nominal: "25000",
     bulan: String(new Date().getMonth() + 1),
     tahun: String(new Date().getFullYear()),
@@ -121,7 +122,6 @@ export function TagihanSection({ onRefresh }: { onRefresh?: () => void }) {
     tanggalBayar: todayISO(),
   });
 
-  // === Dynamic Jenis Tagihan (stored in Setting table) ===
   const [jenisList, setJenisList] = useState<string[]>(JENIS_TAGIHAN);
   const [newJenis, setNewJenis] = useState("");
   const [addingJenis, setAddingJenis] = useState(false);
@@ -192,7 +192,6 @@ export function TagihanSection({ onRefresh }: { onRefresh?: () => void }) {
   async function handleDeleteJenis() {
     if (!jenisToDelete) return;
     const target = jenisToDelete;
-    // Cek apakah jenis sedang dipakai di tagihan mana pun
     const usedCount = list.filter((t) => t.jenisTagihan === target).length;
     if (usedCount > 0) {
       toast({
@@ -216,7 +215,6 @@ export function TagihanSection({ onRefresh }: { onRefresh?: () => void }) {
         throw new Error(j.error || "Gagal menyimpan");
       }
       setJenisList(newList);
-      // Kalau jenis aktif di filter/form dihapus, reset
       if (filterJenis === target) setFilterJenis("all");
       if (form.jenisTagihan === target) setForm({ ...form, jenisTagihan: newList[0] || "" });
       if (bulkForm.jenisTagihan === target) setBulkForm({ ...bulkForm, jenisTagihan: newList[0] || "" });
@@ -251,6 +249,16 @@ export function TagihanSection({ onRefresh }: { onRefresh?: () => void }) {
       })
       .finally(() => setLoading(false));
   }, [year, filterJenis, filterBulan, filterStatus, filterWarga]);
+
+  function handleExportExcel() {
+    const params = new URLSearchParams();
+    params.set("year", String(year));
+    if (filterJenis !== "all") params.set("jenis", filterJenis);
+    if (filterBulan !== "all") params.set("month", filterBulan);
+    if (filterStatus !== "all") params.set("status", filterStatus);
+    if (filterWarga !== "all") params.set("wargaId", filterWarga);
+    window.open(`/api/tagihan/export-excel?${params.toString()}`, "_blank");
+  }
 
   useEffect(() => {
     fetch("/api/warga")
@@ -418,7 +426,6 @@ export function TagihanSection({ onRefresh }: { onRefresh?: () => void }) {
     }
   }
 
-  // Build matrix data: warga x bulan untuk jenis terpilih (matrix view)
   const matrixJenis = filterJenis !== "all" ? filterJenis : (jenisList[0] || JENIS_TAGIHAN[0]);
   const matrixWarga = wargaList.filter((w) => w.status === "aktif");
   const matrixData = matrixWarga.map((w) => {
@@ -457,7 +464,7 @@ export function TagihanSection({ onRefresh }: { onRefresh?: () => void }) {
             <div className="text-xl font-bold text-violet-600">{stats?.totalTagihan || 0}</div>
             <p className="text-xs text-muted-foreground mt-1">{formatRupiah(stats?.totalNominal || 0)}</p>
           </CardContent>
-        </Card>
+                  </Card>
 
         <Card className="card-lift relative overflow-hidden border-0 shadow-lg shadow-emerald-500/20">
           <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-500 to-teal-600" />
@@ -518,6 +525,17 @@ export function TagihanSection({ onRefresh }: { onRefresh?: () => void }) {
               </CardDescription>
             </div>
             <div className="flex gap-2 flex-wrap">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleExportExcel}
+                className="gap-1.5 bg-emerald-50 hover:bg-emerald-100 border-emerald-200 text-emerald-700"
+                title="Export laporan tagihan ke Excel (multi-sheet, siap print)"
+              >
+                <FileSpreadsheet className="h-4 w-4" />
+                <span className="hidden sm:inline">Export Excel</span>
+                <span className="sm:hidden">Export</span>
+              </Button>
               <Button variant="outline" size="sm" onClick={() => setJenisDialogOpen(true)} className="gap-1.5">
                 <Tags className="h-4 w-4" />
                 <span className="hidden sm:inline">Kelola Jenis</span>
@@ -613,7 +631,6 @@ export function TagihanSection({ onRefresh }: { onRefresh?: () => void }) {
               ))}
             </div>
           ) : viewMode === "matrix" ? (
-            /* MATRIX VIEW */
             matrixWarga.length === 0 ? (
               <div className="text-center py-12 text-muted-foreground">
                 <Users className="h-10 w-10 mx-auto mb-2 opacity-40" />
@@ -645,7 +662,6 @@ export function TagihanSection({ onRefresh }: { onRefresh?: () => void }) {
                     <span className="text-muted-foreground">Belum ada tagihan</span>
                   </div>
                 </div>
-                {/* MOBILE: card per warga, 12 bulan grid 4x3 */}
                 <div className="md:hidden space-y-2">
                   {matrixData.map((row) => {
                     return (
@@ -653,7 +669,6 @@ export function TagihanSection({ onRefresh }: { onRefresh?: () => void }) {
                         key={row.warga.id}
                         className="rounded-xl border bg-card p-3 shadow-sm"
                       >
-                        {/* Header: nama + total */}
                         <div className="flex items-start justify-between gap-2 mb-3">
                           <div className="min-w-0 flex-1">
                             <div className="font-semibold text-sm truncate" title={row.warga.namaLengkap}>
@@ -671,7 +686,6 @@ export function TagihanSection({ onRefresh }: { onRefresh?: () => void }) {
                             <div className="text-[10px] text-muted-foreground mt-0.5">{formatRupiah(row.totalLunas)}</div>
                           </div>
                         </div>
-                        {/* 12 bulan grid 4x3 (3 row x 4 col) */}
                         <div className="grid grid-cols-4 gap-1.5">
                           {row.months.map((mo) => {
                             const t = mo.tagihan;
@@ -718,7 +732,6 @@ export function TagihanSection({ onRefresh }: { onRefresh?: () => void }) {
                   })}
                 </div>
 
-                {/* DESKTOP: keep horizontal scroll table */}
                 <div className="hidden md:block overflow-x-auto rounded-lg border scrollbar-thin">
                   <table className="w-full text-sm border-collapse min-w-[760px]">
                     <thead>
@@ -797,7 +810,6 @@ export function TagihanSection({ onRefresh }: { onRefresh?: () => void }) {
               </>
             )
           ) : (
-            /* LIST VIEW */
             list.length === 0 ? (
               <div className="text-center py-12 text-muted-foreground">
                 <Receipt className="h-10 w-10 mx-auto mb-2 opacity-40" />
@@ -805,11 +817,9 @@ export function TagihanSection({ onRefresh }: { onRefresh?: () => void }) {
               </div>
             ) : (
               <>
-              {/* MOBILE: card per tagihan */}
               <div className="md:hidden space-y-2 max-h-[55vh] overflow-y-auto pr-1">
                 {list.map((t) => (
                   <div key={t.id} className="rounded-xl border bg-card p-3 shadow-sm">
-                    {/* Header: warga + status */}
                     <div className="flex items-start justify-between gap-2 mb-2">
                       <div className="min-w-0 flex-1">
                         <div className="font-semibold text-sm truncate">{t.warga?.namaLengkap || "—"}</div>
@@ -826,16 +836,13 @@ export function TagihanSection({ onRefresh }: { onRefresh?: () => void }) {
                       )}
                     </div>
 
-                    {/* Body: jenis + periode */}
                     <div className="flex items-center justify-between gap-2 mb-2 text-xs">
                       <Badge variant="outline" className="text-[11px]">{t.jenisTagihan}</Badge>
                       <span className="text-muted-foreground">{BULAN_NAMA[t.bulan - 1]} {t.tahun}</span>
                     </div>
 
-                    {/* Nominal (large) */}
                     <div className="text-lg font-bold mb-3">{formatRupiah(t.nominal)}</div>
 
-                    {/* Actions */}
                     <div className="flex gap-1.5">
                       {t.status === "belum_bayar" ? (
                         <Button
@@ -879,7 +886,6 @@ export function TagihanSection({ onRefresh }: { onRefresh?: () => void }) {
                 ))}
               </div>
 
-              {/* DESKTOP: keep table */}
               <div className="hidden md:block max-h-[55vh] overflow-y-auto rounded-md border scrollbar-thin">
                 <Table>
                   <TableHeader className="sticky top-0 bg-background z-10">
@@ -1012,7 +1018,6 @@ export function TagihanSection({ onRefresh }: { onRefresh?: () => void }) {
             </DialogDescription>
           </DialogHeader>
 
-          {/* Form tambah */}
           <div className="flex gap-2">
             <Input
               placeholder="Nama jenis tagihan baru..."
@@ -1034,7 +1039,6 @@ export function TagihanSection({ onRefresh }: { onRefresh?: () => void }) {
             </Button>
           </div>
 
-          {/* List of jenis */}
           <div className="space-y-2">
             <div className="text-xs font-medium text-muted-foreground">
               {jenisList.length} jenis tagihan terdaftar
@@ -1077,7 +1081,6 @@ export function TagihanSection({ onRefresh }: { onRefresh?: () => void }) {
             })}
           </div>
 
-          {/* Info note */}
           <div className="flex items-start gap-2 text-xs text-muted-foreground bg-muted/30 rounded-lg p-3">
             <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
             <div>
