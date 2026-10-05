@@ -1,0 +1,30 @@
+==== PETUNJUK UPLOAD EXPORT TAGIHAN 12 BULAN ====
+
+ISI ZIP INI:
+1. export-excel/route.ts        -> API baru (folder export-excel + file route.ts)
+2. tagihan-section.tsx          -> UI yang sudah diperbarui
+3. PETUNJUK.txt                 -> file ini
+
+LANGKAH 1 - Upload API (file route.ts):
+a. Buka: github.com/yanajuliana15/kas_rt_vilkar_D/tree/main/src/app/api/tagihan
+b. Klik "Add file" -> "Upload files"
+c. DRAG SELURUH FOLDER "export-excel" (yang ada di ZIP ini) ke halaman upload
+   -> GitHub otomatis membuat folder export-excel/route.ts
+d. Commit changes
+
+LANGKAH 2 - Update UI (file tagihan-section.tsx):
+a. Buka: github.com/yanajuliana15/kas_rt_vilkar_D/tree/main/src/components/kas-rt
+b. Klik "Add file" -> "Upload files"
+c. Drag file tagihan-section.tsx (yang ada di ZIP ini)
+d. Commit changes
+
+LANGKAH 3 - Selesai:
+a. Tunggu 2 menit (Vercel deploy otomatis)
+b. Buka web live, tekan Ctrl+Shift+R
+c. Menu Tagihan -> klik tombol "Export Tagihan"
+d. File tagihan-warga-2026.xlsx akan ter-download (isi 3 sheet:
+   Tagihan 12 Bulan, Rincian Tagihan, Rekap Jenis)
+
+CATATAN:
+- Tombol export mengikuti filter Tahun dan Jenis yang dipilih di menu Tagihan.
+- Jika hasil Excel kosong, berarti belum ada data tagihan pada tahun tersebut.
