@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
             ],
           }
         : undefined,
-      orderBy: { createdAt: "desc" },
+     { createdAt: "desc" },
     });
     return NextResponse.json({ data: warga });
   } catch (e) {
