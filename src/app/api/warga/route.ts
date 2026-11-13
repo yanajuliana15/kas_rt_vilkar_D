@@ -19,7 +19,8 @@ export async function GET(req: NextRequest) {
             ],
           }
         : undefined,
-     { createdAt: "desc" },
+    orderBy: { nik: "asc" },
+
     });
     return NextResponse.json({ data: warga });
   } catch (e) {
