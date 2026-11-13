@@ -6,7 +6,7 @@ import * as XLSX from "xlsx";
 export async function GET() {
   try {
     const warga = await db.warga.findMany({
-      orderBy: { createdAt: "desc" },
+   orderBy: { nik: "asc" },
     });
 
     // Format data untuk Excel
