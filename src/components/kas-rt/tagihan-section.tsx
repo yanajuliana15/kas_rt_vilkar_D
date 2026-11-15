@@ -530,6 +530,25 @@ export function TagihanSection({ onRefresh }: { onRefresh?: () => void }) {
     return { warga: w, months, paid, totalNominal, totalLunas };
   });
 
+  // TOTAL per bulan: menjumlahkan tagihan yang tampil di matriks (ikut filter gang & jenis)
+  const matrixTotals = Array.from({ length: 12 }, (_, i) => {
+    let nominal = 0;
+    let lunas = 0;
+    let belum = 0;
+    let count = 0;
+    matrixData.forEach((row) => {
+      const t = row.months[i]?.tagihan;
+      if (!t) return;
+      nominal += t.nominal;
+      count += 1;
+      if (t.status === "lunas") lunas += t.nominal;
+      else belum += t.nominal;
+    });
+    return { month: i + 1, nominal, lunas, belum, count };
+  });
+  const matrixTotalSemua = matrixTotals.reduce((a, b) => a + b.nominal, 0);
+  const matrixTotalLunas = matrixTotals.reduce((a, b) => a + b.lunas, 0);
+
   const collectionRate = stats && stats.totalNominal > 0
     ? Math.round((stats.totalLunas / stats.totalNominal) * 100)
     : 0;
@@ -760,6 +779,40 @@ export function TagihanSection({ onRefresh }: { onRefresh?: () => void }) {
                     <span className="text-muted-foreground">Belum ada tagihan</span>
                   </div>
                 </div>
+                {/* TOTAL per bulan (HP) — mengikuti filter yang dipilih */}
+                <div className="md:hidden mb-3">
+                  <div className="text-xs font-medium text-muted-foreground mb-1.5">
+                    Total per bulan {year}
+                    {filterGang !== "all" ? ` — Gang ${filterGang}` : ""}
+                    {filterJenis !== "all" ? ` — ${matrixJenis}` : ""}
+                  </div>
+                  <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
+                    {matrixTotals.map((t) => (
+                      <div
+                        key={t.month}
+                        className={`flex-shrink-0 rounded-lg border px-2.5 py-1.5 text-center min-w-[78px] ${
+                          t.nominal > 0 ? "bg-background" : "bg-muted/40 text-muted-foreground"
+                        }`}
+                        title={`${BULAN_NAMA[t.month - 1]} ${year}: ${t.count} tagihan — total ${formatRupiah(t.nominal)}, lunas ${formatRupiah(t.lunas)}, belum ${formatRupiah(t.belum)}`}
+                      >
+                        <div className="text-[11px] font-semibold">{BULAN_LABEL[t.month - 1]}</div>
+                        <div className="text-[10px] font-bold text-violet-600">
+                          {t.nominal > 0 ? formatRupiah(t.nominal) : "—"}
+                        </div>
+                        {t.nominal > 0 && (
+                          <div className="text-[9px] text-emerald-600 leading-tight">
+                            Lunas {formatRupiah(t.lunas)}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                    <div className="flex-shrink-0 rounded-lg bg-violet-50 dark:bg-violet-950/50 border border-violet-200 dark:border-violet-800 px-2.5 py-1.5 text-center min-w-[88px]">
+                      <div className="text-[11px] font-semibold text-violet-700 dark:text-violet-300">Semua</div>
+                      <div className="text-[10px] font-bold text-violet-600">{formatRupiah(matrixTotalSemua)}</div>
+                      <div className="text-[9px] text-emerald-600 leading-tight">Lunas {formatRupiah(matrixTotalLunas)}</div>
+                    </div>
+                  </div>
+                </div>
                 {/* MOBILE: card per warga, 12 bulan grid 4x3 */}
                 <div className="md:hidden space-y-2">
                   {matrixData.map((row) => {
@@ -907,6 +960,36 @@ export function TagihanSection({ onRefresh }: { onRefresh?: () => void }) {
                         );
                       })}
                     </tbody>
+                    <tfoot>
+                      <tr className="border-t-2 bg-muted/60 font-semibold">
+                        <td className="sticky left-0 z-10 px-3 py-2 bg-muted/60 border-r text-xs uppercase tracking-wide">
+                          Total
+                        </td>
+                        {matrixTotals.map((t) => (
+                          <td
+                            key={t.month}
+                            className="p-1 text-center align-middle"
+                            title={`${BULAN_NAMA[t.month - 1]} ${year}: ${t.count} tagihan — lunas ${formatRupiah(t.lunas)}, belum ${formatRupiah(t.belum)}`}
+                          >
+                            {t.nominal > 0 ? (
+                              <div className="leading-tight">
+                                <div className="text-[10px] font-bold">{formatRupiah(t.nominal)}</div>
+                                <div className="text-[9px] text-emerald-600">{formatRupiah(t.lunas)}</div>
+                                <div className="text-[9px] text-rose-500">{formatRupiah(t.belum)}</div>
+                              </div>
+                            ) : (
+                              <span className="text-[10px] text-muted-foreground">—</span>
+                            )}
+                          </td>
+                        ))}
+                        <td className="px-2 py-2 text-center sticky right-0 z-10 bg-muted/60 border-l">
+                          <div className="font-bold text-xs">{formatRupiah(matrixTotalSemua)}</div>
+                          <div className="text-[9px] text-emerald-600 leading-tight">
+                            Lunas {formatRupiah(matrixTotalLunas)}
+                          </div>
+                        </td>
+                      </tr>
+                    </tfoot>
                   </table>
                 </div>
               </>
