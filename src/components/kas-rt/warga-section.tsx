@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { Plus, Search, Pencil, Trash2, Users, UserPlus, Phone, MapPin, Briefcase, Download, FileSpreadsheet, Upload, FileDown, AlertCircle, CheckCircle2, XCircle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -46,6 +46,38 @@ import { useToast } from "@/hooks/use-toast";
 import { authFetch } from "@/lib/api-client";
 import { type Warga } from "@/lib/kas";
 
+// ---- Urutan & filter Gang (hanya tampilan — data di database tidak diubah) ----
+
+// Urut alami: D1-01 < D2-09 < D10-04 < D11-30 (bukan urutan teks biasa)
+function naturalCompare(a: string, b: string): number {
+  const pa = a.toLowerCase().match(/\d+|\D+/g) ?? [];
+  const pb = b.toLowerCase().match(/\d+|\D+/g) ?? [];
+  const len = Math.max(pa.length, pb.length);
+  for (let i = 0; i < len; i++) {
+    const x = pa[i];
+    const y = pb[i];
+    if (x === undefined) return -1;
+    if (y === undefined) return 1;
+    const nx = /^\d+$/.test(x);
+    const ny = /^\d+$/.test(y);
+    if (nx && ny) {
+      const d = parseInt(x, 10) - parseInt(y, 10);
+      if (d !== 0) return d;
+    } else if (x !== y) {
+      return x < y ? -1 : 1;
+    }
+  }
+  return 0;
+}
+
+// Ambil kode gang dari NIK / no. rumah, mis. "D4-12" -> "D4", "D10-04" -> "D10"
+function gangOf(nik: string, noRumah?: string | null): string {
+  const m = (nik || "").match(/^D\s*\d+/i);
+  if (m) return m[0].replace(/\s+/g, "").toUpperCase();
+  const r = (noRumah || "").match(/^D\s*\d+/i);
+  return r ? r[0].replace(/\s+/g, "").toUpperCase() : "";
+}
+
 const emptyForm = {
   nik: "",
   namaLengkap: "",
@@ -67,6 +99,7 @@ export function WargaSection({ isAdmin = false }: { isAdmin?: boolean }) {
   const [list, setList] = useState<Warga[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [gang, setGang] = useState("all");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<typeof emptyForm>(emptyForm);
@@ -95,6 +128,27 @@ export function WargaSection({ isAdmin = false }: { isAdmin?: boolean }) {
     const t = setTimeout(fetchList, 300);
     return () => clearTimeout(t);
   }, [fetchList]);
+
+  // Daftar gang yang ada di data + jumlah warganya (dinamis, ikut data asli)
+  const gangs = useMemo(() => {
+    const count = new Map<string, number>();
+    list.forEach((w) => {
+      const g = gangOf(w.nik, w.noRumah);
+      if (g) count.set(g, (count.get(g) || 0) + 1);
+    });
+    return Array.from(count.entries()).sort((a, b) => naturalCompare(a[0], b[0]));
+  }, [list]);
+
+  // Yang tampil di tabel: saring per gang + urut D1 -> D11
+  const visible = useMemo(() => {
+    const filtered =
+      gang === "all" ? list : list.filter((w) => gangOf(w.nik, w.noRumah) === gang);
+    return [...filtered].sort(
+      (a, b) =>
+        naturalCompare(a.nik, b.nik) ||
+        (a.namaLengkap || "").localeCompare(b.namaLengkap || "", "id")
+    );
+  }, [list, gang]);
 
   function openCreate() {
     setForm(emptyForm);
@@ -221,14 +275,29 @@ export function WargaSection({ isAdmin = false }: { isAdmin?: boolean }) {
   return (
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Cari nama, NIK, alias, alamat..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
-          />
+        <div className="flex flex-1 gap-2 max-w-xl">
+          <div className="relative flex-1 min-w-0">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Cari nama, NIK, alias, alamat..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+          <Select value={gang} onValueChange={setGang}>
+            <SelectTrigger className="w-[160px] flex-shrink-0 bg-background">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Semua Gang ({list.length})</SelectItem>
+              {gangs.map(([g, n]) => (
+                <SelectItem key={g} value={g}>
+                  Gang {g} ({n})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
         <div className="flex gap-2">
           <Button
@@ -265,7 +334,8 @@ export function WargaSection({ isAdmin = false }: { isAdmin?: boolean }) {
             <div className="rounded-lg bg-cyan-50 dark:bg-cyan-950 p-2">
               <Users className="h-4 w-4 text-cyan-600" />
             </div>
-            Daftar Warga ({list.length})
+            Daftar Warga ({visible.length}
+            {gang !== "all" ? ` · Gang ${gang}` : ""})
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -275,10 +345,12 @@ export function WargaSection({ isAdmin = false }: { isAdmin?: boolean }) {
                 <div key={i} className="h-12 rounded bg-muted animate-pulse" />
               ))}
             </div>
-          ) : list.length === 0 ? (
+          ) : visible.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
               <Users className="h-10 w-10 mx-auto mb-2 opacity-40" />
-              Belum ada data warga. Klik "Tambah Warga" untuk memulai.
+              {list.length === 0
+                ? 'Belum ada data warga. Klik "Tambah Warga" untuk memulai.'
+                : `Tidak ada warga di Gang ${gang}.`}
             </div>
           ) : (
             <div className="max-h-[60vh] overflow-y-auto rounded-md border">
@@ -286,7 +358,8 @@ export function WargaSection({ isAdmin = false }: { isAdmin?: boolean }) {
                 <TableHeader className="sticky top-0 bg-background z-10">
                   <TableRow>
                     <TableHead className="w-[60px]">No</TableHead>
-                    <TableHead>NIK / Nama</TableHead>
+                    <TableHead className="w-[110px]">NIK</TableHead>
+                    <TableHead>Nama / Alamat</TableHead>
                     <TableHead>Kontak</TableHead>
                     <TableHead>Pekerjaan</TableHead>
                     <TableHead>Status</TableHead>
@@ -294,14 +367,22 @@ export function WargaSection({ isAdmin = false }: { isAdmin?: boolean }) {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {list.map((w, i) => (
+                  {visible.map((w, i) => (
                     <TableRow key={w.id}>
                       <TableCell className="text-muted-foreground">{i + 1}</TableCell>
                       <TableCell>
-                        <div className="font-medium">{w.namaLengkap}</div>
-                        <div className="text-xs text-muted-foreground">
+                        <span className="font-mono text-xs font-medium bg-muted rounded px-1.5 py-0.5">
                           {w.nik}
-                          {w.alias ? ` · ${w.alias}` : ""}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <div className="font-medium">
+                          {w.namaLengkap}
+                          {w.alias ? (
+                            <span className="text-xs text-muted-foreground font-normal">
+                              {" "}· {w.alias}
+                            </span>
+                          ) : null}
                         </div>
                         <div className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
                           <MapPin className="h-3 w-3" />
@@ -401,7 +482,7 @@ export function WargaSection({ isAdmin = false }: { isAdmin?: boolean }) {
                   id="nik"
                   value={form.nik}
                   onChange={(e) => setForm({ ...form, nik: e.target.value })}
-                  placeholder="16 digit NIK"
+                  placeholder="Kode rumah (mis. D6-10) / NIK 16 digit"
                   maxLength={20}
                 />
               </div>
