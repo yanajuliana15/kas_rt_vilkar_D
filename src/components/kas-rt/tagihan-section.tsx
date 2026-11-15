@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import {
   Receipt,
   Plus,
@@ -82,6 +82,39 @@ interface TagihanStats {
   perJenis: { jenis: string; count: number; nominal: number; lunas: number; belum: number }[];
 }
 
+// ---- Urutan & filter Gang (hanya tampilan — data di database tidak diubah) ----
+
+// Urut alami: D1-01 < D2-09 < D10-04 < D11-30 (bukan urutan teks biasa)
+function naturalCompare(a: string, b: string): number {
+  const pa = a.toLowerCase().match(/\d+|\D+/g) ?? [];
+  const pb = b.toLowerCase().match(/\d+|\D+/g) ?? [];
+  const len = Math.max(pa.length, pb.length);
+  for (let i = 0; i < len; i++) {
+    const x = pa[i];
+    const y = pb[i];
+    if (x === undefined) return -1;
+    if (y === undefined) return 1;
+    const nx = /^\d+$/.test(x);
+    const ny = /^\d+$/.test(y);
+    if (nx && ny) {
+      const d = parseInt(x, 10) - parseInt(y, 10);
+      if (d !== 0) return d;
+    } else if (x !== y) {
+      return x < y ? -1 : 1;
+    }
+  }
+  return 0;
+}
+
+// Ambil kode gang dari data warga, mis. NIK "D4-12" -> "D4", "D10-04" -> "D10"
+function gangOf(warga?: { nik?: string | null; noRumah?: string | null } | null): string {
+  if (!warga) return "";
+  const m = (warga.nik || "").match(/^D\s*\d+/i);
+  if (m) return m[0].replace(/\s+/g, "").toUpperCase();
+  const r = (warga.noRumah || "").match(/^D\s*\d+/i);
+  return r ? r[0].replace(/\s+/g, "").toUpperCase() : "";
+}
+
 export function TagihanSection({ onRefresh }: { onRefresh?: () => void }) {
   const [list, setList] = useState<Tagihan[]>([]);
   const [stats, setStats] = useState<TagihanStats | null>(null);
@@ -93,6 +126,7 @@ export function TagihanSection({ onRefresh }: { onRefresh?: () => void }) {
   const [filterBulan, setFilterBulan] = useState<string>("all");
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [filterWarga, setFilterWarga] = useState<string>("all");
+  const [filterGang, setFilterGang] = useState<string>("all");
   const [viewMode, setViewMode] = useState<"matrix" | "list">("matrix");
 
   const [inputOpen, setInputOpen] = useState(false);
@@ -445,7 +479,41 @@ export function TagihanSection({ onRefresh }: { onRefresh?: () => void }) {
 
   // Build matrix data: warga x bulan untuk jenis terpilih (matrix view)
   const matrixJenis = filterJenis !== "all" ? filterJenis : (jenisList[0] || JENIS_TAGIHAN[0]);
-  const matrixWarga = wargaList.filter((w) => w.status === "aktif");
+
+  // Daftar gang yang ada di data + jumlah warga aktifnya (dinamis, ikut data asli)
+  const gangs = useMemo(() => {
+    const count = new Map<string, number>();
+    wargaList.forEach((w) => {
+      if (w.status !== "aktif") return;
+      const g = gangOf(w);
+      if (g) count.set(g, (count.get(g) || 0) + 1);
+    });
+    return Array.from(count.entries()).sort((a, b) => naturalCompare(a[0], b[0]));
+  }, [wargaList]);
+
+  // Baris matriks: saring per gang + urut D1 -> D11
+  const matrixWarga = useMemo(() => {
+    return wargaList
+      .filter((w) => w.status === "aktif")
+      .filter((w) => filterGang === "all" || gangOf(w) === filterGang)
+      .sort(
+        (a, b) =>
+          naturalCompare(a.nik, b.nik) ||
+          (a.namaLengkap || "").localeCompare(b.namaLengkap || "", "id")
+      );
+  }, [wargaList, filterGang]);
+
+  // Tagihan di mode Daftar: saring per gang + urut menurut warga (D1 -> D11)
+  const visibleList = useMemo(() => {
+    const filtered =
+      filterGang === "all" ? list : list.filter((t) => gangOf(t.warga) === filterGang);
+    return [...filtered].sort(
+      (a, b) =>
+        naturalCompare(a.warga?.nik || "", b.warga?.nik || "") ||
+        (a.warga?.namaLengkap || "").localeCompare(b.warga?.namaLengkap || "", "id") ||
+        a.bulan - b.bulan
+    );
+  }, [list, filterGang]);
   const matrixData = matrixWarga.map((w) => {
     const months: { month: number; tagihan?: Tagihan }[] = [];
     for (let i = 1; i <= 12; i++) {
@@ -565,7 +633,7 @@ export function TagihanSection({ onRefresh }: { onRefresh?: () => void }) {
           </div>
 
           {/* Filters */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 mt-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2 mt-4">
             <div className="space-y-1">
               <Label className="text-xs">Tahun</Label>
               <div className="flex gap-1">
@@ -613,6 +681,18 @@ export function TagihanSection({ onRefresh }: { onRefresh?: () => void }) {
                 </SelectContent>
               </Select>
             </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Gang</Label>
+              <Select value={filterGang} onValueChange={setFilterGang}>
+                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Semua</SelectItem>
+                  {gangs.map(([g, n]) => (
+                    <SelectItem key={g} value={g}>Gang {g} ({n})</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="space-y-1 col-span-2 sm:col-span-1">
               <Label className="text-xs">Warga</Label>
               <Select value={filterWarga} onValueChange={setFilterWarga}>
@@ -647,7 +727,9 @@ export function TagihanSection({ onRefresh }: { onRefresh?: () => void }) {
             matrixWarga.length === 0 ? (
               <div className="text-center py-12 text-muted-foreground">
                 <Users className="h-10 w-10 mx-auto mb-2 opacity-40" />
-                Belum ada warga aktif. Tambahkan data warga terlebih dahulu.
+                {filterGang !== "all"
+                  ? `Tidak ada warga aktif di Gang ${filterGang}.`
+                  : "Belum ada warga aktif. Tambahkan data warga terlebih dahulu."}
               </div>
             ) : (
               <>
@@ -656,6 +738,9 @@ export function TagihanSection({ onRefresh }: { onRefresh?: () => void }) {
                   <span className="text-muted-foreground">Matriks untuk jenis:</span>
                   <Badge className="bg-violet-500 hover:bg-violet-600">{matrixJenis}</Badge>
                   <span className="text-muted-foreground">tahun {year}</span>
+                  {filterGang !== "all" && (
+                    <Badge className="bg-blue-500 hover:bg-blue-600">Gang {filterGang}</Badge>
+                  )}
                 </div>
                 <div className="flex flex-wrap items-center gap-4 mb-3 text-xs">
                   <div className="flex items-center gap-1.5">
@@ -833,11 +918,16 @@ export function TagihanSection({ onRefresh }: { onRefresh?: () => void }) {
                 <Receipt className="h-10 w-10 mx-auto mb-2 opacity-40" />
                 Belum ada tagihan. Klik "Input Tagihan" atau "Generate Massal" untuk memulai.
               </div>
+            ) : visibleList.length === 0 ? (
+              <div className="text-center py-12 text-muted-foreground">
+                <Receipt className="h-10 w-10 mx-auto mb-2 opacity-40" />
+                Tidak ada tagihan di Gang {filterGang} untuk filter yang dipilih.
+              </div>
             ) : (
               <>
               {/* MOBILE: card per tagihan */}
               <div className="md:hidden space-y-2 max-h-[55vh] overflow-y-auto pr-1">
-                {list.map((t) => (
+                {visibleList.map((t) => (
                   <div key={t.id} className="rounded-xl border bg-card p-3 shadow-sm">
                     {/* Header: warga + status */}
                     <div className="flex items-start justify-between gap-2 mb-2">
@@ -924,7 +1014,7 @@ export function TagihanSection({ onRefresh }: { onRefresh?: () => void }) {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {list.map((t, i) => (
+                    {visibleList.map((t, i) => (
                       <TableRow key={t.id}>
                         <TableCell className="text-muted-foreground">{i + 1}</TableCell>
                         <TableCell>
