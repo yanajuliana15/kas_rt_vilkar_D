@@ -106,13 +106,49 @@ function naturalCompare(a: string, b: string): number {
   return 0;
 }
 
-// Ambil kode gang dari data warga, mis. NIK "D4-12" -> "D4", "D10-04" -> "D10"
+// ---- Pembagian gang sesuai buku tagihan RT: kelompok penagihan antar blok ----
+// Satu kelompok bisa menyambung 2 blok, mis. D1 rumah 13-27 + D2 rumah 1-11.
+const GANG_SECTIONS: { label: string; blok: number; min: number; max: number }[] = [
+  { label: "D1/D2", blok: 1, min: 13, max: 27 },
+  { label: "D1/D2", blok: 2, min: 1, max: 11 },
+  { label: "D3/D4", blok: 3, min: 1, max: 12 },
+  { label: "D3/D4", blok: 4, min: 1, max: 12 },
+  { label: "D4/D5", blok: 4, min: 13, max: 25 },
+  { label: "D4/D5", blok: 5, min: 1, max: 13 },
+  { label: "D5/D6", blok: 5, min: 14, max: 27 },
+  { label: "D5/D6", blok: 6, min: 1, max: 15 },
+  { label: "D6/D7", blok: 6, min: 16, max: 30 },
+  { label: "D6/D7", blok: 7, min: 1, max: 16 },
+  { label: "D7/D8", blok: 7, min: 17, max: 32 },
+  { label: "D7/D8", blok: 8, min: 1, max: 12 },
+  { label: "D7/D8", blok: 8, min: 24, max: 35 },
+  { label: "D7/D8", blok: 9, min: 1, max: 14 },
+  { label: "D10", blok: 10, min: 1, max: 999 },
+  { label: "D11", blok: 11, min: 1, max: 999 },
+];
+
+// Ambil nomor blok & nomor rumah dari NIK / no. rumah, mis. "D4-12" -> blok 4, rumah 12
+function parseBlokRumah(nik?: string | null, rumah?: string | null): { blok: number; rumah: number } | null {
+  const s = (nik || "").trim();
+  const m = s.match(/^D\s*(\d+)\s*[-/\s]\s*(\d+)$/i); // bentuk "D4-12" / "D4/12" / "D4 12"
+  if (m) return { blok: parseInt(m[1], 10), rumah: parseInt(m[2], 10) };
+  const b = s.match(/^D\s*(\d+)/i); // NIK "D4..." -> nomor rumah diambil dari kolom no. rumah
+  if (b) {
+    const h = (rumah || "").match(/(\d+)/);
+    if (h) return { blok: parseInt(b[1], 10), rumah: parseInt(h[1], 10) };
+    const h2 = s.match(/(\d+)\s*$/); // no. rumah kosong -> pakai angka di ujung NIK
+    if (h2) return { blok: parseInt(b[1], 10), rumah: parseInt(h2[1], 10) };
+  }
+  return null;
+}
+
+// Kelompok gang menurut buku; rumah di luar daftar dikelompokkan per blok (mis. "D8")
 function gangOf(warga?: { nik?: string | null; noRumah?: string | null } | null): string {
   if (!warga) return "";
-  const m = (warga.nik || "").match(/^D\s*\d+/i);
-  if (m) return m[0].replace(/\s+/g, "").toUpperCase();
-  const r = (warga.noRumah || "").match(/^D\s*\d+/i);
-  return r ? r[0].replace(/\s+/g, "").toUpperCase() : "";
+  const p = parseBlokRumah(warga.nik, warga.noRumah);
+  if (!p) return "";
+  const sec = GANG_SECTIONS.find((s) => s.blok === p.blok && p.rumah >= s.min && p.rumah <= s.max);
+  return sec ? sec.label : `D${p.blok}`;
 }
 
 export function TagihanSection({ onRefresh }: { onRefresh?: () => void }) {
