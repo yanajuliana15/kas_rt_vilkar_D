@@ -2,6 +2,50 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getRole } from "@/lib/auth";
 
+// ---- Pembagian gang (harus sinkron dengan src/components/kas-rt/tagihan-section.tsx) ----
+// Kelompok penagihan antar blok sesuai buku tagihan RT; satu kelompok bisa menyambung 2 blok.
+const GANG_SECTIONS: { label: string; blok: number; min: number; max: number }[] = [
+  { label: "D1/D2", blok: 1, min: 13, max: 27 },
+  { label: "D1/D2", blok: 2, min: 1, max: 11 },
+  { label: "D3/D4", blok: 3, min: 1, max: 12 },
+  { label: "D3/D4", blok: 4, min: 1, max: 12 },
+  { label: "D4/D5", blok: 4, min: 13, max: 25 },
+  { label: "D4/D5", blok: 5, min: 1, max: 13 },
+  { label: "D5/D6", blok: 5, min: 14, max: 27 },
+  { label: "D5/D6", blok: 6, min: 1, max: 15 },
+  { label: "D6/D7", blok: 6, min: 16, max: 30 },
+  { label: "D6/D7", blok: 7, min: 1, max: 16 },
+  { label: "D7/D8", blok: 7, min: 17, max: 32 },
+  { label: "D7/D8", blok: 8, min: 1, max: 12 },
+  { label: "D7/D8", blok: 8, min: 24, max: 35 },
+  { label: "D7/D8", blok: 9, min: 1, max: 14 },
+  { label: "D10", blok: 10, min: 1, max: 999 },
+  { label: "D11", blok: 11, min: 1, max: 999 },
+];
+
+// Ambil nomor blok & nomor rumah dari NIK / no. rumah, mis. "D4-12" -> blok 4, rumah 12
+function parseBlokRumah(nik?: string | null, rumah?: string | null): { blok: number; rumah: number } | null {
+  const s = (nik || "").trim();
+  const m = s.match(/^D\s*(\d+)\s*[-/\s]\s*(\d+)$/i); // bentuk "D4-12" / "D4/12" / "D4 12"
+  if (m) return { blok: parseInt(m[1], 10), rumah: parseInt(m[2], 10) };
+  const b = s.match(/^D\s*(\d+)/i); // NIK "D4..." -> nomor rumah diambil dari kolom no. rumah
+  if (b) {
+    const h = (rumah || "").match(/(\d+)/);
+    if (h) return { blok: parseInt(b[1], 10), rumah: parseInt(h[1], 10) };
+    const h2 = s.match(/(\d+)\s*$/); // no. rumah kosong -> pakai angka di ujung NIK
+    if (h2) return { blok: parseInt(b[1], 10), rumah: parseInt(h2[1], 10) };
+  }
+  return null;
+}
+
+// Label gang sebuah warga; rumah di luar daftar dikelompokkan per blok (mis. "D8")
+function gangOfWarga(w: { nik?: string | null; noRumah?: string | null }): string {
+  const p = parseBlokRumah(w.nik, w.noRumah);
+  if (!p) return "";
+  const sec = GANG_SECTIONS.find((s) => s.blok === p.blok && p.rumah >= s.min && p.rumah <= s.max);
+  return sec ? sec.label : `D${p.blok}`;
+}
+
 // GET /api/tagihan?year=&month=&jenis=&status=&wargaId=
 export async function GET(req: NextRequest) {
   try {
@@ -71,7 +115,7 @@ export async function GET(req: NextRequest) {
 }
 
 // POST /api/tagihan - create single tagihan
-// POST /api/tagihan?bulk=true - generate bulk untuk semua warga aktif
+// POST /api/tagihan?bulk=true - generate bulk untuk semua warga aktif (atau per gang)
 export async function POST(req: NextRequest) {
   try {
     const role = await getRole(req);
@@ -83,33 +127,48 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
 
     if (bulk) {
-      // Generate massal
-      const { jenisTagihan, nominal, bulan, tahun, keterangan, onlyActive = true, status = "belum_bayar", tanggalBayar } = body;
+      // Generate massal — semua gang atau satu gang saja (mis. "D3/D4")
+      const { jenisTagihan, nominal, bulan, tahun, keterangan, onlyActive = true, status = "belum_bayar", tanggalBayar, gang } = body;
       if (!jenisTagihan || !nominal || !bulan || !tahun) {
         return NextResponse.json(
           { error: "jenisTagihan, nominal, bulan, tahun wajib diisi" },
           { status: 400 }
         );
       }
+      if (gang !== undefined && gang !== null && typeof gang !== "string") {
+        return NextResponse.json({ error: "Parameter gang tidak valid" }, { status: 400 });
+      }
       const finalStatus = status === "lunas" ? "lunas" : "belum_bayar";
       const wargaList = await db.warga.findMany({
         where: onlyActive ? { status: "aktif" } : undefined,
-        select: { id: true, namaLengkap: true },
+        select: { id: true, namaLengkap: true, nik: true, noRumah: true },
       });
+      // Filter per gang (opsional): cocokkan label gang dari NIK/no. rumah
+      const gangList = gang ? wargaList.filter((w) => gangOfWarga(w) === gang) : wargaList;
+      if (gang && gangList.length === 0) {
+        return NextResponse.json({
+          success: true,
+          message: `Tidak ada warga aktif di Gang ${gang}`,
+          created: 0,
+          skipped: 0,
+        });
+      }
       // Cek duplikat
       const existing = await db.tagihan.findMany({
         where: { jenisTagihan, bulan: Number(bulan), tahun: Number(tahun) },
         select: { wargaId: true },
       });
       const existingSet = new Set(existing.map((e) => e.wargaId));
-      const toCreate = wargaList.filter((w) => !existingSet.has(w.id));
+      const toCreate = gangList.filter((w) => !existingSet.has(w.id));
 
       if (toCreate.length === 0) {
         return NextResponse.json({
           success: true,
-          message: "Tagihan untuk jenis & bulan ini sudah ada untuk semua warga",
+          message: gang
+            ? `Tagihan untuk jenis & bulan ini sudah ada untuk semua warga Gang ${gang}`
+            : "Tagihan untuk jenis & bulan ini sudah ada untuk semua warga",
           created: 0,
-          skipped: wargaList.length,
+          skipped: gangList.length,
         });
       }
 
@@ -163,9 +222,9 @@ export async function POST(req: NextRequest) {
 
       return NextResponse.json({
         success: true,
-        message: `${createdCount} tagihan berhasil dibuat (${finalStatus === "lunas" ? "Sudah Lunas" : "Belum Bayar"})`,
+        message: `${createdCount} tagihan berhasil dibuat${gang ? ` untuk Gang ${gang}` : ""} (${finalStatus === "lunas" ? "Sudah Lunas" : "Belum Bayar"})`,
         created: createdCount,
-        skipped: wargaList.length - createdCount,
+        skipped: gangList.length - createdCount,
         status: finalStatus,
       });
     }
