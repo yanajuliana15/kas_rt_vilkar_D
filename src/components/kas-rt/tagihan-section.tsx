@@ -211,6 +211,7 @@ export function TagihanSection({ onRefresh }: { onRefresh?: () => void }) {
     nominal: "25000",
     bulan: String(new Date().getMonth() + 1),
     tahun: String(new Date().getFullYear()),
+    gang: "all", // "all" = semua warga aktif, atau label gang (mis. "D3/D4") untuk generate per gang
     keterangan: "",
     status: "belum_bayar" as "belum_bayar" | "lunas",
     tanggalBayar: todayISO(),
@@ -427,6 +428,10 @@ export function TagihanSection({ onRefresh }: { onRefresh?: () => void }) {
       toast({ title: "Validasi gagal", description: "Semua field wajib diisi", variant: "destructive" });
       return;
     }
+    if (bulkForm.gang !== "all" && bulkTargets.length === 0) {
+      toast({ title: "Tidak ada warga", description: `Tidak ada warga aktif di Gang ${bulkForm.gang}`, variant: "destructive" });
+      return;
+    }
     setSaving(true);
     try {
       const res = await authFetch("/api/tagihan?bulk=true", {
@@ -437,6 +442,7 @@ export function TagihanSection({ onRefresh }: { onRefresh?: () => void }) {
           nominal: Number(bulkForm.nominal),
           bulan: Number(bulkForm.bulan),
           tahun: Number(bulkForm.tahun),
+          gang: bulkForm.gang === "all" ? undefined : bulkForm.gang,
           keterangan: bulkForm.keterangan,
           status: bulkForm.status,
           tanggalBayar: bulkForm.status === "lunas" ? bulkForm.tanggalBayar : undefined,
@@ -526,6 +532,13 @@ export function TagihanSection({ onRefresh }: { onRefresh?: () => void }) {
     });
     return Array.from(count.entries()).sort((a, b) => naturalCompare(a[0], b[0]));
   }, [wargaList]);
+
+  // Target Generate Massal: warga aktif pada gang terpilih (atau semua jika "all")
+  const bulkTargets = useMemo(() => {
+    const aktif = wargaList.filter((w) => w.status === "aktif");
+    if (bulkForm.gang === "all") return aktif;
+    return aktif.filter((w) => gangOf(w) === bulkForm.gang);
+  }, [wargaList, bulkForm.gang]);
 
   // Baris matriks: saring per gang + urut D1 -> D11
   const matrixWarga = useMemo(() => {
@@ -1445,7 +1458,7 @@ export function TagihanSection({ onRefresh }: { onRefresh?: () => void }) {
           <DialogHeader>
             <DialogTitle>Generate Tagihan Massal</DialogTitle>
             <DialogDescription>
-              Buat tagihan untuk semua warga aktif sekaligus. Warga yang sudah punya tagihan jenis+bulan sama akan dilewati.
+              Buat tagihan sekaligus — pilih <b>semua gang</b> atau <b>satu gang saja</b> (sesuai pembagian buku tagihan: D1/D2, D3/D4, dst). Warga yang sudah punya tagihan jenis+bulan sama akan dilewati.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleBulkGenerate} className="space-y-4">
@@ -1495,6 +1508,21 @@ export function TagihanSection({ onRefresh }: { onRefresh?: () => void }) {
               </div>
             </div>
             <div className="space-y-2">
+              <Label htmlFor="bulkGang">Gang</Label>
+              <Select value={bulkForm.gang} onValueChange={(v) => setBulkForm({ ...bulkForm, gang: v })}>
+                <SelectTrigger id="bulkGang"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Semua Gang — semua warga aktif ({wargaList.filter(w => w.status === "aktif").length} warga)</SelectItem>
+                  {gangs.map(([g, n]) => (
+                    <SelectItem key={g} value={g}>Gang {g} — {n} warga aktif</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Pilih <b>satu gang</b> untuk membuat tagihan hanya untuk warga di gang tersebut — cocok kalau penagihan dikerjakan per koordinator gang.
+              </p>
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="bulkKeterangan">Keterangan (opsional)</Label>
               <Textarea
                 id="bulkKeterangan"
@@ -1533,13 +1561,15 @@ export function TagihanSection({ onRefresh }: { onRefresh?: () => void }) {
             {bulkForm.status === "lunas" ? (
               <div className="rounded-lg bg-emerald-50 dark:bg-emerald-950/40 p-3 text-xs text-emerald-700 dark:text-emerald-300">
                 <CheckCircle2 className="h-3.5 w-3.5 inline mr-1" />
-                Akan membuat <span className="font-bold">{wargaList.filter(w => w.status === "aktif").length} tagihan SUDAH LUNAS</span> dengan nominal {formatRupiah(Number(bulkForm.nominal) || 0)}/warga.
+                Akan membuat <span className="font-bold">{bulkTargets.length} tagihan SUDAH LUNAS</span>
+                {bulkForm.gang !== "all" && <> untuk <span className="font-bold">Gang {bulkForm.gang}</span></>} dengan nominal {formatRupiah(Number(bulkForm.nominal) || 0)}/warga.
                 Pembayaran otomatis masuk ke Kas Vilkar Kosambi Blok D (kategori: {bulkForm.jenisTagihan}).
               </div>
             ) : (
               <div className="rounded-lg bg-rose-50 dark:bg-rose-950/40 p-3 text-xs text-rose-700 dark:text-rose-300">
                 <XCircle className="h-3.5 w-3.5 inline mr-1" />
-                Akan membuat <span className="font-bold">{wargaList.filter(w => w.status === "aktif").length} tagihan BELUM BAYAR</span> dengan nominal {formatRupiah(Number(bulkForm.nominal) || 0)}/warga. Tandai lunas nanti via matriks/daftar.
+                Akan membuat <span className="font-bold">{bulkTargets.length} tagihan BELUM BAYAR</span>
+                {bulkForm.gang !== "all" && <> untuk <span className="font-bold">Gang {bulkForm.gang}</span></>} dengan nominal {formatRupiah(Number(bulkForm.nominal) || 0)}/warga. Tandai lunas nanti via matriks/daftar.
               </div>
             )}
             <DialogFooter>
